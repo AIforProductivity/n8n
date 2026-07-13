@@ -57,10 +57,10 @@ Before starting, gather or generate the items in the **Values to Replace** secti
 | Placeholder | Replace With | Example |
 |-----------|--------------|---------|
 | `n8n.example.com` | Your domain or subdomain | `automation.example.com` |
-| `203.0.113.10` | Your VM's public IP address | `198.51.100.42` |
+| `203.x.xxx.10` | Your VM's public IP address | `198.51.100.42` |
 | `your-user` | Your Linux username | `ubuntu` |
 | `YOUR_POSTGRES_PASSWORD` | Strong database password (min. 24 chars) | `P@ssw0rd!Secure123$Random` |
-| `YOUR_RANDOM_64_CHARACTER_ENCRYPTION_KEY` | Output of `openssl rand -hex 32` | `20ed8322a39c5c8a672d431e8dde321ae6833ee1573ed5b362a7271a0239b054` |
+| `YOUR_RANDOM_64_CHARACTER_ENCRYPTION_KEY` | Output of `openssl rand -hex 32` | `20ed8322a39c5c8xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 | `UTC` | Your timezone | `Europe/London`, `America/New_York`, `Asia/Tokyo` |
 | `admin@example.com` | Your email for Let's Encrypt | `your-email@yourdomain.com` |
 
@@ -96,7 +96,7 @@ If using a cloud provider with a firewall/security groups, ensure these inbound 
                      ↓
         ┌────────────────────────────────┐
         │     Cloud Provider Public IP    │
-        │     (e.g., 203.0.113.10)       │
+        │     (e.g., 203.x.xxx.10)       │
         └────────────┬───────────────────┘
                      │
                      ↓
@@ -136,7 +136,7 @@ In your DNS provider's control panel, create the following record:
 |-------|-------|
 | **Host/Name** | `n8n` (or your preferred subdomain) |
 | **Type** | A |
-| **Value** | Your VM's public IP (e.g., `203.0.113.10`) |
+| **Value** | Your VM's public IP (e.g., `203.x.xxx.10`) |
 | **TTL** | 300 (5 minutes, for quick propagation) |
 
 ### Verify DNS Resolution
@@ -150,7 +150,7 @@ nslookup n8n.example.com
 **Expected output:**
 ```
 Name:    n8n.example.com
-Address: 203.0.113.10
+Address: 203.x.xxx.10
 ```
 
 **From Google's public DNS:**
@@ -262,7 +262,7 @@ services:
       - n8n-network
 
   n8n:
-    image: n8nio/n8n:1.107.4
+    image: n8nio/n8n:latest
     container_name: n8n
     restart: unless-stopped
     depends_on:
@@ -300,7 +300,7 @@ networks:
 EOF
 ```
 
-**Note:** Replace `1.107.4` with the latest stable version available at [Docker Hub - n8n](https://hub.docker.com/r/n8nio/n8n/tags).
+**Note:** The latest stable version is available at [Docker Hub - n8n](https://hub.docker.com/r/n8nio/n8n/tags).
 
 ### Step 2: Install Docker & Docker Compose
 
@@ -463,7 +463,7 @@ Before running Certbot, verify DNS is working and ports 80/443 are accessible:
 
 ```bash
 nslookup n8n.example.com 8.8.8.8
-curl http://203.0.113.10
+curl http://203.x.xxx.10
 ```
 
 **Request certificate. Replace `n8n.example.com` and `admin@example.com` with your values:**
@@ -493,7 +493,7 @@ sudo certbot renew --dry-run
 ### Test HTTP Access
 
 ```bash
-curl http://203.0.113.10
+curl http://203.x.xxx.10
 ```
 
 Should redirect to HTTPS.
@@ -566,13 +566,12 @@ docker compose up -d
 The example already uses a pinned version (`1.107.4`), but always:
 
 - Check [Docker Hub - n8n](https://hub.docker.com/r/n8nio/n8n/tags) for the latest stable version
-- Never use `latest` in production
 
 Update your `docker-compose.yml`:
 
 ```yaml
 n8n:
-  image: n8nio/n8n:1.107.4  # Pin to known stable version
+  image: n8nio/n8n:latest  # Pin to known stable version
 ```
 
 ---
