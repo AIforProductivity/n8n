@@ -1,24 +1,27 @@
 # N8N Deployment Guide - Production Setup
 
-A complete guide to deploying n8n with PostgreSQL, Docker, Nginx reverse proxy, and Let's Encrypt HTTPS on Azure VMs.
+A complete guide to deploying n8n with PostgreSQL, Docker, Nginx reverse proxy, and Let's Encrypt HTTPS on Linux VMs.
 
 **Architecture Overview:**
 ```
 Internet → Nginx (HTTPS) → n8n Docker ← PostgreSQL Docker
 ```
 
+> **Important:** All domains, IP addresses, passwords, encryption keys, and hostnames shown in this guide are examples. Replace them with values appropriate for your environment before deployment.
+
 ---
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Networking and Security Settings](#networking-and-security-settings)
-3. [DNS Configuration](#dns-configuration)
-4. [Pre-Installation Configuration](#pre-installation-configuration)
-5. [Installation - Step by Step](#installation---step-by-step)
-6. [Post-Installation Configuration](#post-installation-configuration)
-7. [Troubleshooting & Verification](#troubleshooting--verification)
-8. [Production Recommendations](#production-recommendations)
+2. [Values to Replace](#values-to-replace)
+3. [Networking and Security Settings](#networking-and-security-settings)
+4. [DNS Configuration](#dns-configuration)
+5. [Pre-Installation Configuration](#pre-installation-configuration)
+6. [Installation - Step by Step](#installation---step-by-step)
+7. [Post-Installation Configuration](#post-installation-configuration)
+8. [Troubleshooting & Verification](#troubleshooting--verification)
+9. [Production Recommendations](#production-recommendations)
 
 ---
 
@@ -26,8 +29,8 @@ Internet → Nginx (HTTPS) → n8n Docker ← PostgreSQL Docker
 
 ### System Requirements
 
-- **OS:** Ubuntu 24.04 LTS (or later)
-- **Cloud Provider:** Azure (or any provider supporting public IPs and security groups)
+- **OS:** Ubuntu LTS (22.04 or later)
+- **Cloud Provider:** Any provider supporting public IPs and security groups (AWS, Azure, DigitalOcean, etc.)
 - **Tools Required:**
   - Docker Engine
   - Docker Compose
@@ -38,32 +41,40 @@ Internet → Nginx (HTTPS) → n8n Docker ← PostgreSQL Docker
 ### Software Versions (Recommended)
 
 - **PostgreSQL:** 16
-- **n8n:** Latest stable (or pin a specific version for production)
+- **n8n:** Latest stable version (see [Docker Hub](https://hub.docker.com/r/n8nio/n8n/tags) for available versions)
 - **Nginx:** Latest from Ubuntu repos
 
 ### Credentials & Information to Prepare
 
-Before starting, gather or generate:
+Before starting, gather or generate the items in the **Values to Replace** section below.
 
-| Item | Placeholder | Purpose |
-|------|-------------|---------|
-| Domain Name | `n8n-template.imawais.engineer` | Public-facing hostname |
-| Azure Public IP | `20.219.193.66` | Assigned to your VM |
-| PostgreSQL Password | `AWAIS_N8N_DB_PASSWORD` | Database authentication |
-| n8n Encryption Key | `20ed8322a39c5c8a672d431e8dde321ae6833ee1573ed5b362a7271a0239b054` | Credential encryption |
-| Timezone | `Asia/Karachi` | n8n system timezone |
+---
+
+## Values to Replace
+
+**Use this table as a reference throughout the guide. Replace each placeholder with your own values:**
+
+| Placeholder | Replace With | Example |
+|-----------|--------------|---------|
+| `n8n.example.com` | Your domain or subdomain | `automation.example.com` |
+| `203.0.113.10` | Your VM's public IP address | `198.51.100.42` |
+| `your-user` | Your Linux username | `ubuntu` |
+| `YOUR_POSTGRES_PASSWORD` | Strong database password (min. 24 chars) | `P@ssw0rd!Secure123$Random` |
+| `YOUR_RANDOM_64_CHARACTER_ENCRYPTION_KEY` | Output of `openssl rand -hex 32` | `20ed8322a39c5c8a672d431e8dde321ae6833ee1573ed5b362a7271a0239b054` |
+| `UTC` | Your timezone | `Europe/London`, `America/New_York`, `Asia/Tokyo` |
+| `admin@example.com` | Your email for Let's Encrypt | `your-email@yourdomain.com` |
 
 ---
 
 ## Networking and Security Settings
 
-### Azure Network Security Group (NSG) Configuration
+### Network Security Configuration
 
-In the **Azure Portal**, navigate to your VM's **Network Security Group** and ensure these inbound rules are set:
+If using a cloud provider with a firewall/security groups, ensure these inbound rules are set:
 
 | Port | Protocol | Source | Action | Purpose |
 |------|----------|--------|--------|---------|
-| 22 | TCP | Your IP or `*` | Allow | SSH access |
+| 22 | TCP | Your IP or restricted range | Allow | SSH access |
 | 80 | TCP | Internet (`0.0.0.0/0`) | Allow | HTTP (Let's Encrypt validation) |
 | 443 | TCP | Internet (`0.0.0.0/0`) | Allow | HTTPS (n8n UI) |
 
@@ -78,19 +89,19 @@ In the **Azure Portal**, navigate to your VM's **Network Security Group** and en
                          │
                          ↓
         ┌────────────────────────────────┐
-        │   Domain: n8n-example.com      │
+        │   Domain: n8n.example.com      │
         │   (DNS A Record)               │
         └────────────┬───────────────────┘
                      │
                      ↓
         ┌────────────────────────────────┐
-        │     Azure Public IP             │
-        │     (e.g., 20.219.193.66)      │
+        │     Cloud Provider Public IP    │
+        │     (e.g., 203.0.113.10)       │
         └────────────┬───────────────────┘
                      │
                      ↓
         ┌────────────────────────────────┐
-        │      Azure Network Group       │
+        │  Security Group / Firewall     │
         │    (Ports 22, 80, 443)         │
         └────────────┬───────────────────┘
                      │
@@ -123,9 +134,9 @@ In your DNS provider's control panel, create the following record:
 
 | Field | Value |
 |-------|-------|
-| **Host/Name** | `n8n-template` (or your preferred subdomain) |
+| **Host/Name** | `n8n` (or your preferred subdomain) |
 | **Type** | A |
-| **Value** | Your Azure Public IP (e.g., `20.219.193.66`) |
+| **Value** | Your VM's public IP (e.g., `203.0.113.10`) |
 | **TTL** | 300 (5 minutes, for quick propagation) |
 
 ### Verify DNS Resolution
@@ -133,18 +144,18 @@ In your DNS provider's control panel, create the following record:
 **From your local machine (Windows/Mac/Linux):**
 
 ```bash
-nslookup n8n-template.imawais.engineer
+nslookup n8n.example.com
 ```
 
 **Expected output:**
 ```
-Name:    n8n-template.imawais.engineer
-Address: 20.219.193.66
+Name:    n8n.example.com
+Address: 203.0.113.10
 ```
 
 **From Google's public DNS:**
 ```bash
-nslookup n8n-template.imawais.engineer 8.8.8.8
+nslookup n8n.example.com 8.8.8.8
 ```
 
 **Wait for propagation:** DNS changes can take 5–300 seconds. Keep checking every few minutes until it resolves correctly.
@@ -163,10 +174,12 @@ sudo apt upgrade -y
 ### Step 2: Create Project Directory Structure
 
 ```bash
-mkdir -p ~/Apps/n8n/data
-mkdir -p ~/Apps/n8n/postgres
-cd ~/Apps/n8n
+mkdir -p ~/n8n/data
+mkdir -p ~/n8n/postgres
+cd ~/n8n
 ```
+
+> Note: `/opt/n8n` is also a common production location. Adjust paths as needed.
 
 ### Step 3: Generate Encryption Key
 
@@ -180,42 +193,42 @@ openssl rand -hex 32
 
 Example output:
 ```
-20ed8322a39c5c8a672d431e8dde321ae6833ee1573ed5b362a7271a0239b054
+a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
 ```
 
 ### Step 4: Prepare Configuration Values
 
-Create a `.env` file for easy management:
+Create a `.env` file for easy management. Replace all placeholders with your actual values:
 
 ```bash
-cat > ~/Apps/n8n/.env << 'EOF'
+cat > ~/n8n/.env << 'EOF'
 # PostgreSQL Configuration
 POSTGRES_USER=n8n
-POSTGRES_PASSWORD=AWAIS_N8N_DB_PASSWORD
+POSTGRES_PASSWORD=YOUR_POSTGRES_PASSWORD
 
 # n8n Configuration
-N8N_HOST=n8n-template.imawais.engineer
+N8N_HOST=n8n.example.com
 N8N_PROTOCOL=https
 N8N_PORT=5678
 
 # Webhook & Editor URLs
-WEBHOOK_URL=https://n8n-template.imawais.engineer/
-N8N_EDITOR_BASE_URL=https://n8n-template.imawais.engineer/
+WEBHOOK_URL=https://n8n.example.com/
+N8N_EDITOR_BASE_URL=https://n8n.example.com/
 
 # Timezone
-GENERIC_TIMEZONE=Asia/Karachi
+GENERIC_TIMEZONE=UTC
 
 # Security
 N8N_SECURE_COOKIE=true
-N8N_ENCRYPTION_KEY=20ed8322a39c5c8a672d431e8dde321ae6833ee1573ed5b362a7271a0239b054
+N8N_ENCRYPTION_KEY=YOUR_RANDOM_64_CHARACTER_ENCRYPTION_KEY
 EOF
 ```
 
 **⚠️ Replace placeholders:**
-- `AWAIS_N8N_DB_PASSWORD` → Your secure database password
-- `n8n-template.imawais.engineer` → Your actual domain
+- `YOUR_POSTGRES_PASSWORD` → Your secure database password (minimum 24 characters)
+- `n8n.example.com` → Your actual domain
 - `N8N_ENCRYPTION_KEY` → The key generated in Step 3
-- `Asia/Karachi` → Your timezone
+- `UTC` → Your timezone (e.g., `Europe/London`, `America/New_York`, `Asia/Tokyo`)
 
 ---
 
@@ -226,7 +239,7 @@ EOF
 Create the Docker Compose configuration file:
 
 ```bash
-cat > ~/Apps/n8n/docker-compose.yml << 'EOF'
+cat > ~/n8n/docker-compose.yml << 'EOF'
 version: '3.8'
 
 services:
@@ -249,7 +262,7 @@ services:
       - n8n-network
 
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:1.107.4
     container_name: n8n
     restart: unless-stopped
     depends_on:
@@ -287,6 +300,8 @@ networks:
 EOF
 ```
 
+**Note:** Replace `1.107.4` with the latest stable version available at [Docker Hub - n8n](https://hub.docker.com/r/n8nio/n8n/tags).
+
 ### Step 2: Install Docker & Docker Compose
 
 ```bash
@@ -307,7 +322,7 @@ docker compose version
 ### Step 3: Start n8n & PostgreSQL
 
 ```bash
-cd ~/Apps/n8n
+cd ~/n8n
 docker compose up -d
 ```
 
@@ -363,12 +378,12 @@ curl http://localhost
 
 ### Step 4: Configure Nginx as Reverse Proxy
 
-Create the Nginx configuration file:
+Create the Nginx configuration file. Replace `n8n.example.com` with your actual domain:
 
 ```bash
 sudo bash -c 'cat > /etc/nginx/sites-available/default << '\''EOF'\''
 server {
-    server_name n8n-template.imawais.engineer;
+    server_name n8n.example.com;
 
     client_max_body_size 100M;
 
@@ -398,8 +413,8 @@ server {
 
     # HTTPS configuration (added by Certbot)
     listen 443 ssl http2;
-    ssl_certificate /etc/letsencrypt/live/n8n-template.imawais.engineer/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/n8n-template.imawais.engineer/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/n8n.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/n8n.example.com/privkey.pem;
 
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
@@ -408,14 +423,14 @@ server {
 # HTTP to HTTPS redirect
 server {
     listen 80;
-    server_name n8n-template.imawais.engineer;
+    server_name n8n.example.com;
     return 301 https://$host$request_uri;
 }
 EOF
 '
 ```
 
-**⚠️ Replace `n8n-template.imawais.engineer` with your actual domain.**
+**⚠️ Replace `n8n.example.com` with your actual domain (2 occurrences).**
 
 ### Step 5: Test Nginx Configuration
 
@@ -447,20 +462,15 @@ sudo apt install certbot python3-certbot-nginx -y
 Before running Certbot, verify DNS is working and ports 80/443 are accessible:
 
 ```bash
-nslookup n8n-template.imawais.engineer 8.8.8.8
-curl http://20.219.193.66
+nslookup n8n.example.com 8.8.8.8
+curl http://203.0.113.10
 ```
 
-**Request certificate:**
+**Request certificate. Replace `n8n.example.com` and `admin@example.com` with your values:**
 
 ```bash
-sudo certbot --nginx -d n8n-template.imawais.engineer
+sudo certbot --nginx -d n8n.example.com -m admin@example.com --agree-tos
 ```
-
-**Follow the prompts:**
-- Enter your email
-- Agree to terms
-- Choose certificate options
 
 **Expected output:**
 ```
@@ -483,18 +493,18 @@ sudo certbot renew --dry-run
 ### Test HTTP Access
 
 ```bash
-curl http://20.219.193.66
+curl http://203.0.113.10
 ```
 
-Should redirect to HTTPS or show Nginx welcome page.
+Should redirect to HTTPS.
 
 ### Test HTTPS Access
 
 ```bash
-curl https://n8n-template.imawais.engineer -k
+curl https://n8n.example.com -I
 ```
 
-(The `-k` flag skips certificate validation; remove it when certificate is valid)
+Should return a 200 status code after DNS propagation.
 
 ### Check n8n Service Status
 
@@ -520,11 +530,11 @@ docker logs n8n-postgres --tail=20
 If you need to start fresh:
 
 ```bash
-cd ~/Apps/n8n
+cd ~/n8n
 docker compose down
 
 # Delete config but keep data volumes
-rm -f ~/Apps/n8n/data/config
+rm -f ~/n8n/data/config
 
 # Restart
 docker compose up -d
@@ -538,11 +548,11 @@ docker logs n8n -f
 If you encounter permission errors when deleting the postgres directory:
 
 ```bash
-cd ~/Apps/n8n
+cd ~/n8n
 docker compose down
 
-sudo rm -rf ~/Apps/n8n/postgres
-mkdir ~/Apps/n8n/postgres
+sudo rm -rf ~/n8n/postgres
+mkdir ~/n8n/postgres
 
 docker compose up -d
 ```
@@ -553,54 +563,78 @@ docker compose up -d
 
 ### 1. Version Pinning
 
-Instead of `image: n8nio/n8n:latest`, specify a version:
+The example already uses a pinned version (`1.107.4`), but always:
+
+- Check [Docker Hub - n8n](https://hub.docker.com/r/n8nio/n8n/tags) for the latest stable version
+- Never use `latest` in production
+
+Update your `docker-compose.yml`:
 
 ```yaml
 n8n:
   image: n8nio/n8n:1.107.4  # Pin to known stable version
 ```
 
-Find available versions at [Docker Hub - n8n](https://hub.docker.com/r/n8nio/n8n/tags)
+---
 
 ### 2. Separate Passwords
 
-Use different passwords for PostgreSQL and n8n encryption:
+Use different passwords for PostgreSQL and n8n encryption. Generate them securely:
 
 ```bash
-# Generate PostgreSQL password
-openssl rand -base64 24 > db_password.txt
+# Generate PostgreSQL password (24+ characters)
+openssl rand -base64 24
 
-# Generate n8n encryption key
-openssl rand -hex 32 > encryption_key.txt
+# Generate n8n encryption key (64 hex characters)
+openssl rand -hex 32
 ```
+
+Store these in your `.env` file, never in version control.
+
+---
 
 ### 3. Automated PostgreSQL Backups
 
 Create a backup script:
 
 ```bash
-cat > ~/Apps/n8n/backup.sh << 'EOF'
+cat > ~/n8n/backup.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR=~/Apps/n8n/backups
+BACKUP_DIR=~/n8n/backups
 mkdir -p $BACKUP_DIR
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-docker exec n8n-postgres pg_dump -U n8n n8n | gzip > $BACKUP_DIR/n8n_backup_$TIMESTAMP.sql.gz
+# Backup PostgreSQL database
+docker exec n8n-postgres pg_dump -U n8n n8n | gzip > $BACKUP_DIR/n8n_db_backup_$TIMESTAMP.sql.gz
+
+# Backup n8n data directory (contains workflows, credentials, etc.)
+tar -czf $BACKUP_DIR/n8n_data_backup_$TIMESTAMP.tar.gz -C ~/n8n data/
 
 # Keep only last 30 days
 find $BACKUP_DIR -name "*.sql.gz" -mtime +30 -delete
+find $BACKUP_DIR -name "*.tar.gz" -mtime +30 -delete
 
-echo "Backup completed: $BACKUP_DIR/n8n_backup_$TIMESTAMP.sql.gz"
+echo "Backup completed:"
+echo "  - Database: $BACKUP_DIR/n8n_db_backup_$TIMESTAMP.sql.gz"
+echo "  - Data: $BACKUP_DIR/n8n_data_backup_$TIMESTAMP.tar.gz"
 EOF
 
-chmod +x ~/Apps/n8n/backup.sh
+chmod +x ~/n8n/backup.sh
 ```
 
 **Schedule with cron (daily at 2 AM):**
 
 ```bash
-(crontab -l 2>/dev/null; echo "0 2 * * * ~/Apps/n8n/backup.sh") | crontab -
+(crontab -l 2>/dev/null; echo "0 2 * * * ~/n8n/backup.sh") | crontab -
 ```
+
+**Verify cron entry:**
+
+```bash
+crontab -l
+```
+
+---
 
 ### 4. Docker Log Rotation
 
@@ -620,6 +654,8 @@ EOF
 sudo systemctl restart docker
 ```
 
+---
+
 ### 5. System Monitoring
 
 Install monitoring tools:
@@ -633,7 +669,12 @@ df -h
 
 # Check memory
 free -h
+
+# Check n8n container resources
+docker stats n8n n8n-postgres
 ```
+
+---
 
 ### 6. Firewall Configuration (Optional)
 
@@ -646,19 +687,43 @@ sudo ufw allow 443/tcp
 sudo ufw enable
 ```
 
+**Verify UFW rules:**
+
+```bash
+sudo ufw status
+```
+
+---
+
 ### 7. Security Hardening
 
-- **SSH:** Disable password auth, use key-based auth only
-- **Firewall:** Restrict source IPs for port 22
-- **Secrets:** Use a secrets manager instead of hardcoding in `.env`
-- **Updates:** Regularly update Docker images and OS packages
+- **SSH Key-Based Auth:** Disable password authentication, use SSH keys only
+- **Firewall:** Restrict source IPs for port 22 to your IP range
+- **Secrets Management:** Use a secrets manager (HashiCorp Vault, AWS Secrets Manager) instead of `.env` files for production
+- **Regular Updates:** Keep Docker images and OS packages updated:
+  ```bash
+  sudo apt update && sudo apt upgrade -y
+  docker compose pull && docker compose up -d
+  ```
+- **.env File Permissions:** Ensure `.env` is readable only by your user:
+  ```bash
+  chmod 600 ~/n8n/.env
+  ```
+- **Remove Default Nginx Config:** Back up and remove the default config:
+  ```bash
+  sudo mv /etc/nginx/sites-available/default /etc/nginx/sites-available/default.backup
+  ```
+
+---
 
 ### 8. Create Deployment Scripts
 
 **deploy.sh** - Initial setup:
 ```bash
 #!/bin/bash
-cd ~/Apps/n8n
+set -e
+cd ~/n8n
+docker compose pull
 docker compose up -d
 docker logs n8n -f
 ```
@@ -666,7 +731,11 @@ docker logs n8n -f
 **update.sh** - Update n8n version:
 ```bash
 #!/bin/bash
-cd ~/Apps/n8n
+set -e
+cd ~/n8n
+echo "Backing up before update..."
+./backup.sh
+echo "Updating n8n..."
 docker compose pull
 docker compose up -d
 docker logs n8n -f
@@ -675,15 +744,17 @@ docker logs n8n -f
 **restart.sh** - Restart services:
 ```bash
 #!/bin/bash
-cd ~/Apps/n8n
+set -e
+cd ~/n8n
 docker compose restart
 ```
 
-**backup.sh** - Manual backup:
+**backup.sh** - Manual backup (created above):
+Already covered in section 3.
+
+Make scripts executable:
 ```bash
-#!/bin/bash
-cd ~/Apps/n8n
-./backup.sh
+chmod +x ~/n8n/*.sh
 ```
 
 ---
@@ -693,12 +764,12 @@ cd ~/Apps/n8n
 ### Directory Structure
 
 ```
-~/Apps/n8n/
+~/n8n/
 ├── docker-compose.yml      # Service definitions
-├── .env                    # Environment variables
-├── data/                   # n8n data volume
+├── .env                    # Environment variables (keep secret)
+├── data/                   # n8n data volume (workflows, credentials)
 ├── postgres/               # PostgreSQL data volume
-├── backups/                # Backup files (if using backup script)
+├── backups/                # Backup files
 ├── backup.sh               # Backup script
 ├── deploy.sh               # Deployment script
 ├── update.sh               # Update script
@@ -709,12 +780,12 @@ cd ~/Apps/n8n
 
 ```bash
 # Start services
-cd ~/Apps/n8n && docker compose up -d
+cd ~/n8n && docker compose up -d
 
 # Stop services
 docker compose down
 
-# View logs
+# View logs in real-time
 docker logs n8n -f
 docker logs n8n-postgres -f
 
@@ -723,6 +794,9 @@ docker compose restart
 
 # Pull latest images
 docker compose pull
+
+# View container resource usage
+docker stats n8n n8n-postgres
 
 # Execute commands in container
 docker exec n8n n8n export --output=/path/to/export.json
@@ -734,7 +808,9 @@ docker exec n8n-postgres pg_dump -U n8n n8n | gzip > backup.sql.gz
 zcat backup.sql.gz | docker exec -i n8n-postgres psql -U n8n -d n8n
 ```
 
-### Useful Links
+---
+
+## Useful Links
 
 - [n8n Documentation](https://docs.n8n.io)
 - [n8n Docker Hub](https://hub.docker.com/r/n8nio/n8n)
@@ -742,6 +818,7 @@ zcat backup.sql.gz | docker exec -i n8n-postgres psql -U n8n -d n8n
 - [Nginx Documentation](https://nginx.org/en/docs/)
 - [Let's Encrypt Documentation](https://letsencrypt.org/docs/)
 - [Docker Documentation](https://docs.docker.com/)
+- [n8n Community Forum](https://community.n8n.io)
 
 ---
 
@@ -749,12 +826,12 @@ zcat backup.sql.gz | docker exec -i n8n-postgres psql -U n8n -d n8n
 
 For issues or questions:
 
-1. Check logs: `docker logs n8n --tail=100`
-2. Review [n8n GitHub Issues](https://github.com/n8n-io/n8n/issues)
-3. Visit [n8n Community Forum](https://community.n8n.io)
-4. Consult this guide's troubleshooting section
+1. **Check logs:** `docker logs n8n --tail=100`
+2. **Review:** [n8n GitHub Issues](https://github.com/n8n-io/n8n/issues)
+3. **Community:** [n8n Community Forum](https://community.n8n.io)
+4. **This guide:** Refer to the [Troubleshooting & Verification](#troubleshooting--verification) section
 
 ---
 
-**Last Updated:** 2026-07-13  
-**Status:** Production-Ready
+**Status:** Production-Ready  
+**Last Verified:** 2026-07-13
