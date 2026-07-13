@@ -477,15 +477,8 @@ EOF
 
 **Important:** Replace `YOUR_N8N_VERSION` with a specific stable version. Find available versions at [Docker Hub - n8n Tags](https://hub.docker.com/r/n8nio/n8n/tags). Do NOT use `latest` in production.
 
-Modern versions of Docker Compose (Compose V2) no longer require the version: field. If present, Docker displays a warning similar to:
 
-the attribute `version` is obsolete, it will be ignored
-
-This warning does not prevent deployment, but the recommended practice is to omit the version: field and begin the file directly with:
-
-services:
-
-This follows the current Docker Compose specification.
+Modern versions of Docker Compose (Compose V2) no longer require the "version" field. If present, Docker displays a warning similar to: "the attribute `version` is obsolete, it will be ignored". This warning does not prevent deployment, but the recommended practice is to omit the "version" field and begin the file directly with services. This follows the current Docker Compose specification.
 
 
 ### Step 5: Deploy Containers
